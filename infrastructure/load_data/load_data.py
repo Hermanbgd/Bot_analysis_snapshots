@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import timezone
 from typing import Any, List, Dict, Optional
 
 from psycopg import AsyncConnection
@@ -9,10 +9,12 @@ from psycopg import AsyncConnection
 from config.config import Config, load_config
 from infrastructure.database.connection import get_pg_connection
 
+# Загрузка конфигурации
 config: Config = load_config()
 
+# Настройка логирования
 logging.basicConfig(
-    level=logging.getLevelName(level=config.log.level),
+    level=logging.getLevelName(config.log.level),
     format=config.log.format,
 )
 
@@ -25,10 +27,7 @@ async def upsert_videos_and_snapshots(
     data: List[Dict[str, Any]],
 ) -> None:
     """
-    Загружает данные видео и их снапшотов из списка словарей.
-
-    Использует UPSERT для видео (обновление счётчиков + updated_at)
-    и INSERT ... ON CONFLICT (id) DO NOTHING для снапшотов.
+    Загружает видео и их снапшоты в БД с использованием UPSERT.
     """
     if not data:
         logger.info("Нет данных для загрузки в videos/video_snapshots")
@@ -39,21 +38,19 @@ async def upsert_videos_and_snapshots(
 
     try:
         for video in data:
-            # Данные видео
+            # Основные данные видео
             video_values.append((
                 video["id"],
                 video["creator_id"],
-                video["video_created_at"],
+                video["video_created_at"] ,
                 video["views_count"],
                 video["likes_count"],
                 video["comments_count"],
                 video["reports_count"],
-                video["created_at"],
-                video["updated_at"],
             ))
 
             # Снапшоты
-            for snap in video.get("snapshots", []):
+            for snap in video["snapshots"]:
                 snapshot_values.append((
                     snap["id"],
                     snap["video_id"],
@@ -66,32 +63,30 @@ async def upsert_videos_and_snapshots(
                     snap["delta_comments_count"],
                     snap["delta_reports_count"],
                     snap["created_at"],
-                    snap["updated_at"],
                 ))
+
     except KeyError as e:
         logger.error("Отсутствует обязательное поле в данных: %s", e)
         raise
     except Exception as e:
-        logger.error("Ошибка при подготовке данных для загрузки: %s", e)
+        logger.error("Неожиданная ошибка при подготовке данных: %s", e)
         raise
 
     try:
         async with conn.cursor() as cur:
-            # UPSERT видео
             if video_values:
                 await cur.executemany(
                     """
                     INSERT INTO videos (
                         id, creator_id, video_created_at,
-                        views_count, likes_count, comments_count, reports_count,
-                        created_at, updated_at
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        views_count, likes_count, comments_count, reports_count
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (id) DO UPDATE SET
                         views_count = EXCLUDED.views_count,
                         likes_count = EXCLUDED.likes_count,
                         comments_count = EXCLUDED.comments_count,
                         reports_count = EXCLUDED.reports_count,
-                        updated_at = EXCLUDED.updated_at;
+                        updated_at = NOW();
                     """,
                     video_values,
                 )
@@ -106,8 +101,8 @@ async def upsert_videos_and_snapshots(
                         views_count, likes_count, comments_count, reports_count,
                         delta_views_count, delta_likes_count,
                         delta_comments_count, delta_reports_count,
-                        created_at, updated_at
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        created_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (id) DO NOTHING;
                     """,
                     snapshot_values,
@@ -116,7 +111,7 @@ async def upsert_videos_and_snapshots(
 
         logger.info(
             "Загрузка данных завершена успешно. Время: %s. Видео: %d, Снапшоты: %d",
-            datetime.now(timezone.utc).isoformat(),
+            asyncio.get_event_loop().time(),  # или datetime.now(timezone.utc).isoformat() если нужен читаемый формат
             len(video_values),
             len(snapshot_values),
         )
@@ -126,16 +121,17 @@ async def upsert_videos_and_snapshots(
         raise
 
 
-async def main():
-    data_path = "videos.json"
-    videos_data: List[Dict[str, Any]] = []
+async def main() -> None:
+    data_path = "infrastructure/load_data/videos.json"
 
-    # Чтение JSON
+    # Чтение JSON-файла
     try:
-        with open(data_path, encoding="utf-8") as f:
+        with open(data_path, "r", encoding="utf-8") as f:
             full_data = json.load(f)
-        videos_data = full_data.get("videos", full_data)
+
+        videos_data: List[Dict[str, Any]] = full_data.get("videos", full_data)
         logger.info("Успешно загружен JSON-файл: %s. Количество видео: %d", data_path, len(videos_data))
+
     except FileNotFoundError:
         logger.error("Файл не найден: %s", data_path)
         return
@@ -146,6 +142,7 @@ async def main():
         logger.error("Неожиданная ошибка при чтении файла %s: %s", data_path, e)
         return
 
+    # Подключение к БД и загрузка
     connection: Optional[AsyncConnection] = None
     try:
         connection = await get_pg_connection(
@@ -155,13 +152,14 @@ async def main():
             user=config.db.user,
             password=config.db.password,
         )
+
         async with connection:
             async with connection.transaction():
                 await upsert_videos_and_snapshots(connection, data=videos_data)
 
     except Exception as e:
         logger.error("Критическая ошибка при работе с базой данных: %s", e)
-        # Транзакция автоматически откатится при выходе из блока с исключением
+        raise
     finally:
         if connection and not connection.closed:
             await connection.close()

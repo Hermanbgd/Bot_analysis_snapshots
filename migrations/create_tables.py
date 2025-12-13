@@ -31,11 +31,14 @@ async def main():
         async with connection:
             async with connection.transaction():
                 async with connection.cursor() as cursor:
+                    # Расширение pgcrypto для gen_random_uuid()
+                    await cursor.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto;")
+
                     # Таблица видео
                     await cursor.execute(
                         """
                         CREATE TABLE IF NOT EXISTS videos (
-                            id BIGSERIAL PRIMARY KEY,
+                            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                             creator_id TEXT NOT NULL,
                             video_created_at TIMESTAMPTZ NOT NULL,
                             views_count BIGINT,
@@ -47,12 +50,13 @@ async def main():
                         );
                         """
                     )
+
                     # Таблица снэпшотов
                     await cursor.execute(
                         """
                         CREATE TABLE IF NOT EXISTS video_snapshots (
-                            id BIGSERIAL PRIMARY KEY,
-                            video_id BIGSERIAL REFERENCES videos(id),
+                            id UUID PRIMARY KEY,
+                            video_id UUID NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
                             views_count BIGINT,
                             likes_count BIGINT,
                             comments_count BIGINT,
@@ -64,10 +68,18 @@ async def main():
                             created_at TIMESTAMPTZ NOT NULL,
                             updated_at TIMESTAMPTZ DEFAULT NOW()
                         );
-                        CREATE INDEX IF NOT EXISTS idx_video_snapshots_video_id ON video_snapshots(video_id);
-                        CREATE INDEX IF NOT EXISTS idx_video_snapshots_created_at ON video_snapshots(created_at);
-                        CREATE INDEX IF NOT EXISTS idx_videos_creator_id ON videos(creator_id);
-                        CREATE INDEX IF NOT EXISTS idx_videos_video_created_at ON videos(video_created_at);
+                        
+                        CREATE INDEX IF NOT EXISTS idx_video_snapshots_video_id 
+                            ON video_snapshots(video_id);
+
+                        CREATE INDEX IF NOT EXISTS idx_video_snapshots_created_at 
+                            ON video_snapshots(created_at);
+
+                        CREATE INDEX IF NOT EXISTS idx_videos_creator_id 
+                            ON videos(creator_id);
+
+                        CREATE INDEX IF NOT EXISTS idx_videos_video_created_at 
+                            ON videos(video_created_at);
                         """
                     )
                 logger.info("Tables 'videos', 'video_snapshots' were successfully created")
