@@ -36,14 +36,14 @@ async def main():
                         """
                         CREATE TABLE IF NOT EXISTS videos (
                             id BIGSERIAL PRIMARY KEY,
-                            creator_id BIGINT NOT NULL,
-                            video_created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                            creator_id TEXT NOT NULL,
+                            video_created_at TIMESTAMPTZ NOT NULL,
                             views_count BIGINT,
                             likes_count BIGINT,
                             comments_count BIGINT,
                             reports_count BIGINT,
-                            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                            created_at TIMESTAMPTZ DEFAULT NOW(),
+                            updated_at TIMESTAMPTZ DEFAULT NOW()
                         );
                         """
                     )
@@ -52,7 +52,7 @@ async def main():
                         """
                         CREATE TABLE IF NOT EXISTS video_snapshots (
                             id BIGSERIAL PRIMARY KEY,
-                            video_id BIGINT REFERENCES videos(id),
+                            video_id BIGSERIAL REFERENCES videos(id),
                             views_count BIGINT,
                             likes_count BIGINT,
                             comments_count BIGINT,
@@ -61,9 +61,13 @@ async def main():
                             delta_likes_count BIGINT,
                             delta_comments_count BIGINT,
                             delta_reports_count BIGINT,
-                            created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-                            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                            created_at TIMESTAMPTZ NOT NULL,
+                            updated_at TIMESTAMPTZ DEFAULT NOW()
                         );
+                        CREATE INDEX IF NOT EXISTS idx_video_snapshots_video_id ON video_snapshots(video_id);
+                        CREATE INDEX IF NOT EXISTS idx_video_snapshots_created_at ON video_snapshots(created_at);
+                        CREATE INDEX IF NOT EXISTS idx_videos_creator_id ON videos(creator_id);
+                        CREATE INDEX IF NOT EXISTS idx_videos_video_created_at ON videos(video_created_at);
                         """
                     )
                 logger.info("Tables 'videos', 'video_snapshots' were successfully created")
