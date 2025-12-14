@@ -25,22 +25,16 @@ async def get_sql_query(user_query: str,) -> str:
 
         messages: List[Dict[str, str]] = [
             {
-                "role": "system",
-                "content": prompt
-            },
-            {
                 "role": "user",
-                "content": f"Запрос пользователя: {user_query} "
-                           f"Ответь ТОЛЬКО SQL-кодом, без ```sql, без объяснений."
+                "content": f'{prompt}\n Запрос пользователя: {user_query}'
+                           f'Ответь исключительно SQL-кодом.'
             }
         ]
-
         payload = {
-            "model": "newapplication-61123",
+            "model": "newapplication-10028464",
             "messages": messages,
             "stream": False,
-            "temperature": 0.3,
-            "max_tokens": 400
+            "temperature": 0.0,
         }
 
         timeout = aiohttp.ClientTimeout(total=30)
@@ -51,6 +45,18 @@ async def get_sql_query(user_query: str,) -> str:
                     if resp.status == 200:
                         data = await resp.json()
                         content = data["choices"][0]["message"]["content"].strip()
+
+                        # Удаляем возможные ```sql
+                        if content.startswith("```"):
+                            # Убираем блок кода
+                            content = content.split("```", 2)[1]  # берём середину между ```
+                            if content.lstrip().startswith("sql"):
+                                content = content[3:]  # убираем "sql" в начале
+
+                        content = content.strip()
+
+                        logger.info(f"Очищенный SQL: {content}")
+
                         return content
                     else:
                         error = await resp.text()

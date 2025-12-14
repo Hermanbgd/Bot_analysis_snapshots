@@ -8,7 +8,9 @@ from aiogram.enums import ParseMode
 from bot.handlers.other import other_router
 from bot.handlers.query import query_router
 from bot.handlers.start_help import start_help_router
-from config.config import Config
+from config.config import Config, load_config
+
+config: Config = load_config()
 
 logger = logging.getLogger(__name__)
 
@@ -37,4 +39,4 @@ async def main(config: Config) -> None:
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    asyncio.run(main(config))

@@ -23,9 +23,9 @@ async def handle_text_query(message: Message):
         result = await execute_scalar_query(sql)
 
         if result is None:
-            answer = 0
+            answer = "0"
         else:
-            answer = result
+            answer = str(result)
 
         await message.answer(answer)
 

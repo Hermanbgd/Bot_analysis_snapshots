@@ -68,3 +68,7 @@ async def execute_scalar_query(sql_query: str) -> Any:
         if connection and not connection.closed:
             await connection.close()
             logger.debug("Подключение к БД закрыто")
+
+
+res = execute_scalar_query("SELECT COALESCE(SUM(delta_views_count), 0) FROM video_snapshots WHERE created_at::date = '2025-12-01'")
+print(res)

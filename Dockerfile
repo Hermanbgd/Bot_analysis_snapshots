@@ -11,6 +11,8 @@ RUN pip install -r requirements.txt
 
 COPY . .
 
-CMD sh -c "python -m migrations.create_tables && \
-           python -m infrastructure.load_data.load_data && \
-           python main.py"
+#CMD sh -c "python -m migrations.create_tables && \
+#           python -m infrastructure.load_data.load_data && \
+#           python main.py"
+
+CMD sh -c "python main.py"
